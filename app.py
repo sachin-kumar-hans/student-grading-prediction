@@ -41,18 +41,18 @@ This app can:
 )
 
 # -----------------------------
-# 1. Load data (default or uploaded)
+# 1. Load data from repo ONLY (no upload)
 # -----------------------------
-st.sidebar.header("Dataset Options")
+DATA_PATH = "data/final_data.csv"
 
-uploaded_file = st.sidebar.file_uploader("Upload your CSV (optional)", type=["csv"])
-
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-    st.sidebar.success("Using uploaded dataset.")
-else:
-    st.sidebar.info("Using default dataset: `data/final_data.csv`")
-    df, _, _, _ = load_dataset("data/final_data.csv")
+try:
+    df, _, _, _ = load_dataset(DATA_PATH)
+except FileNotFoundError:
+    st.error(
+        f"Default dataset not found at `{DATA_PATH}`.\n\n"
+        "Please ensure `data/final_data.csv` is present in your GitHub repository."
+    )
+    st.stop()
 
 target_col = df.columns[-1]
 X = df.iloc[:, :-1]
@@ -193,22 +193,14 @@ elif mode == "Single prediction (enter attributes)":
     st.write("### Enter student attributes to predict OUTPUT Grade")
     st.info("Please enter whole-number codes as indicated for each attribute.")
 
-    # Train model on full data
-    if uploaded_file is None:
-        model, feature_names, classes = train_full_model("data/final_data.csv")
-    else:
-        model = build_stacking_model()
-        model.fit(X, y)
-        feature_names = list(X.columns)
-        classes = np.unique(y)
+    # Train model on full default data (no upload)
+    model, feature_names, classes = train_full_model(DATA_PATH)
 
     # Help text / label mapping for each attribute
-    # Keys should match your column names; if not, raw name is used.
     feature_help = {
-        "Student ID": "Student ID (enter whole number ID, e.g., 1, 2, 3)",
+        "Student ID": "Student ID (e.g., 1, 2, 3)",
         "Student Age": "Student Age (1: 18-21, 2: 22-25, 3: above 26)",
         "Gender": "Gender (1: female, 2: male)",
-        "Sex": "Gender / Sex (1: female, 2: male)",
         "Graduated high-school type": "Graduated high-school type (1: private, 2: state, 3: other)",
         "Scholarship type": "Scholarship type (1: None, 2: 25%, 3: 50%, 4: 75%, 5: Full)",
         "Additional work": "Additional work (1: Yes, 2: No)",
@@ -217,15 +209,11 @@ elif mode == "Single prediction (enter attributes)":
         "Total salary if available": "Total salary if available (1: USD 135-200, 2: USD 201-270, 3: USD 271-340, 4: USD 341-410, 5: above 410)",
         "Transportation to the university": "Transportation to the university (1: Bus, 2: Private car/taxi, 3: bicycle, 4: Other)",
         "Accommodation type in Cyprus": "Accommodation type in Cyprus (1: rental, 2: dormitory, 3: with family, 4: Other)",
-        "Mother education": "Mother education (1: primary school, 2: secondary school, 3: high school, 4: university, 5: MSc., 6: Ph.D.)",
         "Mothers' education": "Mother education (1: primary school, 2: secondary school, 3: high school, 4: university, 5: MSc., 6: Ph.D.)",
-        "Father education": "Father education (1: primary school, 2: secondary school, 3: high school, 4: university, 5: MSc., 6: Ph.D.)",
         "Fathers' education": "Father education (1: primary school, 2: secondary school, 3: high school, 4: university, 5: MSc., 6: Ph.D.)",
         "Number of sisters/brothers": "Number of sisters/brothers (1: 1, 2: 2, 3: 3, 4: 4, 5: 5 or above)",
         "Parental status": "Parental status (1: married, 2: divorced, 3: died - one of them or both)",
-        "Mother occupation": "Mother occupation (1: retired, 2: housewife, 3: government officer, 4: private sector employee, 5: self-employment, 6: other)",
         "Mothers' occupation": "Mother occupation (1: retired, 2: housewife, 3: government officer, 4: private sector employee, 5: self-employment, 6: other)",
-        "Father occupation": "Father occupation (1: retired, 2: government officer, 3: private sector employee, 4: self-employment, 5: other)",
         "Fathers' occupation": "Father occupation (1: retired, 2: government officer, 3: private sector employee, 4: self-employment, 5: other)",
         "Weekly study hours": "Weekly study hours (1: None, 2: <5 hours, 3: 6-10 hours, 4: 11-20 hours, 5: more than 20 hours)",
         "Reading frequency (non-scientific books/journals)": "Reading frequency (non-scientific books/journals) (1: None, 2: Sometimes, 3: Often)",
@@ -241,7 +229,7 @@ elif mode == "Single prediction (enter attributes)":
         "Flip-classroom": "Flip-classroom (1: not useful, 2: useful, 3: not applicable)",
         "Cumulative grade point average in the last semester (/4.00)": "Cumulative GPA last semester (/4.00) (1: <2.00, 2: 2.00-2.49, 3: 2.50-2.99, 4: 3.00-3.49, 5: above 3.49)",
         "Expected Cumulative grade point average in the graduation (/4.00)": "Expected cumulative GPA in graduation (/4.00) (1: <2.00, 2: 2.00-2.49, 3: 2.50-2.99, 4: 3.00-3.49, 5: above 3.49)",
-        "Course ID": "Course ID (enter whole number ID)"
+        "Course ID": "Course ID (enter values between 0-9)"
     }
 
     st.write("Enter **integer values** for each attribute according to the codes given:")
@@ -250,7 +238,7 @@ elif mode == "Single prediction (enter attributes)":
     cols = st.columns(2)  # two columns layout for cleaner UI
 
     for i, feat in enumerate(feature_names):
-        # Skip if somehow target column is in feature_names (shouldn't be)
+        # Skip target column if somehow included
         if feat == target_col:
             continue
 
