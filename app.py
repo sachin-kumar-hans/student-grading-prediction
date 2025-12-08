@@ -26,7 +26,7 @@ from stacking_cv import load_dataset, build_stacking_model, train_full_model, pr
 # -----------------------------
 st.set_page_config(page_title="Student OUTPUT Grade – Stacking CV", layout="wide")
 
-st.title("🎓 Student OUTPUT Grade Prediction – Stacking Ensemble")
+st.title("🎓 Student GRADE PREDICTION System")
 
 st.markdown(
     """
@@ -50,7 +50,14 @@ try:
 except FileNotFoundError:
     st.error(
         f"Default dataset not found at `{DATA_PATH}`.\n\n"
-        "Please ensure `data/final_data.csv` is present in your GitHub repository."
+        "Please ensure `data/final_data.csv` exists in your GitHub repository."
+    )
+    st.stop()
+except pd.errors.EmptyDataError:
+    st.error(
+        f"`{DATA_PATH}` exists but is **empty**.\n\n"
+        "Open this file in GitHub and paste your full CSV contents into it, "
+        "then save (commit) the file."
     )
     st.stop()
 
@@ -193,7 +200,7 @@ elif mode == "Single prediction (enter attributes)":
     st.write("### Enter student attributes to predict OUTPUT Grade")
     st.info("Please enter whole-number codes as indicated for each attribute.")
 
-    # Train model on full default data (no upload)
+    # Train model on full default data
     model, feature_names, classes = train_full_model(DATA_PATH)
 
     # Help text / label mapping for each attribute
