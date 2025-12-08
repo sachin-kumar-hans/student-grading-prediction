@@ -18,22 +18,31 @@ from sklearn.metrics import (
     auc
 )
 
-from stacking_cv import load_dataset, build_stacking_model
+from stacking_cv import load_dataset, build_stacking_model, train_full_model, predict_single
 
 
+# -----------------------------
+# Streamlit page configuration
+# -----------------------------
 st.set_page_config(page_title="Student OUTPUT Grade – Stacking CV", layout="wide")
 
-st.title("🎓 Student OUTPUT Grade Prediction – Stacking Ensemble (5-Fold CV)")
+st.title("🎓 Student OUTPUT Grade Prediction – Stacking Ensemble")
 
 st.markdown(
     """
-This app runs a **5-fold stratified cross-validation** using a **stacking ensemble**  
-(Random Forest + Gradient Boosting + SVC → Logistic Regression as meta-learner)  
-to predict the **OUTPUT Grade** of students.
+This app can:
+
+1. Run **k-fold stratified cross-validation** using a **stacking ensemble**  
+   (Random Forest + Gradient Boosting + SVC → Logistic Regression as meta-learner)  
+   to evaluate performance on predicting **OUTPUT Grade**.
+
+2. Allow you to **enter student attributes manually** and get a predicted **OUTPUT Grade**.
 """
 )
 
+# -----------------------------
 # 1. Load data (default or uploaded)
+# -----------------------------
 st.sidebar.header("Dataset Options")
 
 uploaded_file = st.sidebar.file_uploader("Upload your CSV (optional)", type=["csv"])
@@ -56,112 +65,172 @@ st.dataframe(df.head())
 
 st.markdown("---")
 
-# 2. Controls
-st.sidebar.header("Cross-Validation Settings")
-n_splits = st.sidebar.slider("Number of folds", min_value=3, max_value=10, value=5, step=1)
-show_plots = st.sidebar.checkbox("Show plots (Confusion Matrix & ROC per fold)", value=True)
+# -----------------------------
+# 2. Mode selection
+# -----------------------------
+st.sidebar.header("Mode")
+mode = st.sidebar.radio(
+    "Select mode",
+    ("Cross-validation", "Single prediction (enter attributes)")
+)
 
-run_button = st.button("Run Cross-Validation")
+# ============================================================
+# MODE 1: Cross-validation
+# ============================================================
+if mode == "Cross-validation":
+    st.sidebar.header("Cross-Validation Settings")
+    n_splits = st.sidebar.slider("Number of folds", min_value=3, max_value=10, value=5, step=1)
+    show_plots = st.sidebar.checkbox("Show plots (Confusion Matrix & ROC per fold)", value=True)
 
-# 3. Run 5-fold CV when requested
-if run_button:
-    st.write("### Running Stratified Cross-Validation")
-    classes = np.unique(y)
+    run_button = st.button("Run Cross-Validation")
 
-    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+    if run_button:
+        st.write("### Running Stratified Cross-Validation")
+        classes = np.unique(y)
 
-    acc_scores = []
-    prec_scores = []
-    rec_scores = []
-    f1_scores = []
-    roc_macro_scores = []
+        skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
 
-    fold_idx = 1
+        acc_scores = []
+        prec_scores = []
+        rec_scores = []
+        f1_scores = []
+        roc_macro_scores = []
 
-    for train_index, test_index in skf.split(X, y):
-        st.markdown(f"## Fold {fold_idx}")
+        fold_idx = 1
 
-        X_train, X_test = X.iloc[train_index], X.iloc[test_index]
-        y_train, y_test = y.iloc[train_index], y.iloc[test_index]
+        for train_index, test_index in skf.split(X, y):
+            st.markdown(f"## Fold {fold_idx}")
 
-        # Build a new stacking model for this fold
+            X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+            y_train, y_test = y.iloc[train_index], y.iloc[test_index]
+
+            # Build a new stacking model for this fold
+            model = build_stacking_model()
+            model.fit(X_train, y_train)
+
+            # Predictions
+            y_pred = model.predict(X_test)
+            y_proba = model.predict_proba(X_test)
+
+            # Metrics
+            acc = accuracy_score(y_test, y_pred)
+            prec = precision_score(y_test, y_pred, average="macro", zero_division=0)
+            rec = recall_score(y_test, y_pred, average="macro", zero_division=0)
+            f1 = f1_score(y_test, y_pred, average="macro", zero_division=0)
+
+            # Multi-class ROC–AUC (macro, OvR)
+            y_test_bin = label_binarize(y_test, classes=classes)
+            roc_auc_macro = roc_auc_score(y_test_bin, y_proba, average="macro", multi_class="ovr")
+
+            acc_scores.append(acc)
+            prec_scores.append(prec)
+            rec_scores.append(rec)
+            f1_scores.append(f1)
+            roc_macro_scores.append(roc_auc_macro)
+
+            # Show metrics for this fold
+            st.write(
+                f"**Accuracy:** {acc:.4f}  |  "
+                f"**Precision (macro):** {prec:.4f}  |  "
+                f"**Recall (macro):** {rec:.4f}  |  "
+                f"**F1-score (macro):** {f1:.4f}  |  "
+                f"**ROC-AUC (macro OvR):** {roc_auc_macro:.4f}"
+            )
+
+            if show_plots:
+                # Confusion Matrix
+                cm = confusion_matrix(y_test, y_pred)
+                fig_cm, ax_cm = plt.subplots(figsize=(4, 3))
+                sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", ax=ax_cm)
+                ax_cm.set_title(f"Confusion Matrix - Fold {fold_idx}")
+                ax_cm.set_xlabel("Predicted")
+                ax_cm.set_ylabel("True")
+                st.pyplot(fig_cm)
+
+                # ROC Curve (micro-averaged)
+                fpr, tpr, _ = roc_curve(y_test_bin.ravel(), y_proba.ravel())
+                roc_auc_micro = auc(fpr, tpr)
+
+                fig_roc, ax_roc = plt.subplots(figsize=(4, 3))
+                ax_roc.plot(fpr, tpr, label=f"AUC = {roc_auc_micro:.3f}")
+                ax_roc.plot([0, 1], [0, 1], "k--")
+                ax_roc.set_xlim([0.0, 1.0])
+                ax_roc.set_ylim([0.0, 1.05])
+                ax_roc.set_xlabel("False Positive Rate")
+                ax_roc.set_ylabel("True Positive Rate")
+                ax_roc.set_title(f"Micro-Averaged ROC Curve - Fold {fold_idx}")
+                ax_roc.legend(loc="lower right")
+                st.pyplot(fig_roc)
+
+            fold_idx += 1
+
+        # 4. Summary across folds
+        st.markdown("---")
+        st.write("## Cross-Validation Summary")
+
+        summary_df = pd.DataFrame({
+            "fold": list(range(1, n_splits + 1)),
+            "accuracy": acc_scores,
+            "precision_macro": prec_scores,
+            "recall_macro": rec_scores,
+            "f1_macro": f1_scores,
+            "roc_auc_macro_ovr": roc_macro_scores
+        })
+        st.dataframe(summary_df.style.format("{:.4f}"))
+
+        st.write("### Mean ± Std across folds")
+        st.write(f"**Accuracy:** {np.mean(acc_scores):.4f} ± {np.std(acc_scores):.4f}")
+        st.write(f"**Precision (macro):** {np.mean(prec_scores):.4f} ± {np.std(prec_scores):.4f}")
+        st.write(f"**Recall (macro):** {np.mean(rec_scores):.4f} ± {np.std(rec_scores):.4f}")
+        st.write(f"**F1-score (macro):** {np.mean(f1_scores):.4f} ± {np.std(f1_scores):.4f}")
+        st.write(f"**ROC-AUC (macro OvR):** {np.mean(roc_macro_scores):.4f} ± {np.std(roc_macro_scores):.4f}")
+
+
+# ============================================================
+# MODE 2: Single prediction (manual input)
+# ============================================================
+elif mode == "Single prediction (enter attributes)":
+    st.write("### Enter student attributes to predict OUTPUT Grade")
+
+    # Train model on full data
+    # Use train_full_model for default dataset, or train from df for uploaded
+    if uploaded_file is None:
+        # Default dataset: use helper from stacking_cv
+        model, feature_names, classes = train_full_model("data/final_data.csv")
+    else:
+        # Uploaded dataset: train directly here
         model = build_stacking_model()
-        model.fit(X_train, y_train)
+        model.fit(X, y)
+        feature_names = list(X.columns)
+        classes = np.unique(y)
 
-        # Predictions
-        y_pred = model.predict(X_test)
-        y_proba = model.predict_proba(X_test)
+    st.write("Enter **integer values** for each attribute (feature):")
 
-        # Metrics
-        acc = accuracy_score(y_test, y_pred)
-        prec = precision_score(y_test, y_pred, average="macro", zero_division=0)
-        rec = recall_score(y_test, y_pred, average="macro", zero_division=0)
-        f1 = f1_score(y_test, y_pred, average="macro", zero_division=0)
+    user_values = []
+    cols = st.columns(2)  # two columns layout for cleaner UI
 
-        # Multi-class ROC–AUC (macro, OvR)
-        y_test_bin = label_binarize(y_test, classes=classes)
-        roc_auc_macro = roc_auc_score(y_test_bin, y_proba, average="macro", multi_class="ovr")
+    for i, feat in enumerate(feature_names):
+        # Alternate between column 0 and 1
+        col = cols[i % 2]
+        with col:
+            val = st.number_input(
+                label=f"{feat}",
+                min_value=0,
+                step=1,
+                format="%d"
+            )
+        user_values.append(val)
 
-        acc_scores.append(acc)
-        prec_scores.append(prec)
-        rec_scores.append(rec)
-        f1_scores.append(f1)
-        roc_macro_scores.append(roc_auc_macro)
+    if st.button("Predict OUTPUT Grade"):
+        # Use predict_single helper (from stacking_cv)
+        pred_label, proba = predict_single(model, user_values)
 
-        # Show metrics for this fold
-        st.write(
-            f"**Accuracy:** {acc:.4f}  |  "
-            f"**Precision (macro):** {prec:.4f}  |  "
-            f"**Recall (macro):** {rec:.4f}  |  "
-            f"**F1-score (macro):** {f1:.4f}  |  "
-            f"**ROC-AUC (macro OvR):** {roc_auc_macro:.4f}"
-        )
+        st.success(f"Predicted OUTPUT Grade: **{pred_label}**")
 
-        if show_plots:
-            # Confusion Matrix
-            cm = confusion_matrix(y_test, y_pred)
-            fig_cm, ax_cm = plt.subplots(figsize=(4, 3))
-            sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", ax=ax_cm)
-            ax_cm.set_title(f"Confusion Matrix - Fold {fold_idx}")
-            ax_cm.set_xlabel("Predicted")
-            ax_cm.set_ylabel("True")
-            st.pyplot(fig_cm)
-
-            # ROC Curve (micro-averaged)
-            fpr, tpr, _ = roc_curve(y_test_bin.ravel(), y_proba.ravel())
-            roc_auc_micro = auc(fpr, tpr)
-
-            fig_roc, ax_roc = plt.subplots(figsize=(4, 3))
-            ax_roc.plot(fpr, tpr, label=f"AUC = {roc_auc_micro:.3f}")
-            ax_roc.plot([0, 1], [0, 1], "k--")
-            ax_roc.set_xlim([0.0, 1.0])
-            ax_roc.set_ylim([0.0, 1.05])
-            ax_roc.set_xlabel("False Positive Rate")
-            ax_roc.set_ylabel("True Positive Rate")
-            ax_roc.set_title(f"Micro-Averaged ROC Curve - Fold {fold_idx}")
-            ax_roc.legend(loc="lower right")
-            st.pyplot(fig_roc)
-
-        fold_idx += 1
-
-    
-    # 4. Summary across folds
-    st.markdown("---")
-    st.write("## Cross-Validation Summary")
-
-    summary_df = pd.DataFrame({
-        "fold": list(range(1, n_splits + 1)),
-        "accuracy": acc_scores,
-        "precision_macro": prec_scores,
-        "recall_macro": rec_scores,
-        "f1_macro": f1_scores,
-        "roc_auc_macro_ovr": roc_macro_scores
-    })
-    st.dataframe(summary_df.style.format("{:.4f}"))
-
-    st.write("### Mean ± Std across folds")
-    st.write(f"**Accuracy:** {np.mean(acc_scores):.4f} ± {np.std(acc_scores):.4f}")
-    st.write(f"**Precision (macro):** {np.mean(prec_scores):.4f} ± {np.std(prec_scores):.4f}")
-    st.write(f"**Recall (macro):** {np.mean(rec_scores):.4f} ± {np.std(rec_scores):.4f}")
-    st.write(f"**F1-score (macro):** {np.mean(f1_scores):.4f} ± {np.std(f1_scores):.4f}")
-    st.write(f"**ROC-AUC (macro OvR):** {np.mean(roc_macro_scores):.4f} ± {np.std(roc_macro_scores):.4f}")
+        # Show probabilities per class
+        st.write("### Class probabilities")
+        proba_df = pd.DataFrame({
+            "Class": classes,
+            "Probability": proba
+        })
+        st.dataframe(proba_df.style.format({"Probability": "{:.4f}"}))

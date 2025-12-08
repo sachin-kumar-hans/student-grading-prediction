@@ -232,6 +232,38 @@ def run_5fold_cv(X, y, plot: bool = True):
 
     return results
 
+def train_full_model(csv_path="data/final_data.csv"):
+    """
+    Train stacking model on the full dataset.
+    Returns: (model, feature_names, classes)
+    """
+    df, X, y, target_col = load_dataset(csv_path)
+    model = build_stacking_model()
+    model.fit(X, y)
+    classes = np.unique(y)
+    return model, list(X.columns), classes
+
+
+def predict_single(model, feature_values):
+    """
+    Predict OUTPUT Grade for a single sample.
+
+    Parameters
+    ----------
+    model : trained stacking model
+    feature_values : list or 1D array of feature values (len = n_features)
+
+    Returns
+    -------
+    pred_label : predicted class label
+    proba : probability vector for each class
+    """
+    import numpy as np
+    X_new = np.array(feature_values, dtype=float).reshape(1, -1)
+    proba = model.predict_proba(X_new)[0]
+    pred_label = model.predict(X_new)[0]
+    return pred_label, proba
+
 
 # -------------------------------------------------
 # 4. Script entry point (optional)
