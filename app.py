@@ -191,30 +191,74 @@ if mode == "Cross-validation":
 # ============================================================
 elif mode == "Single prediction (enter attributes)":
     st.write("### Enter student attributes to predict OUTPUT Grade")
+    st.info("Please enter whole-number codes as indicated for each attribute.")
 
     # Train model on full data
-    # Use train_full_model for default dataset, or train from df for uploaded
     if uploaded_file is None:
-        # Default dataset: use helper from stacking_cv
         model, feature_names, classes = train_full_model("data/final_data.csv")
     else:
-        # Uploaded dataset: train directly here
         model = build_stacking_model()
         model.fit(X, y)
         feature_names = list(X.columns)
         classes = np.unique(y)
 
-    st.write("Enter **integer values** for each attribute (feature):")
+    # Help text / label mapping for each attribute
+    # Keys should match your column names; if not, raw name is used.
+    feature_help = {
+        "Student ID": "Student ID (enter whole number ID, e.g., 1, 2, 3)",
+        "Student Age": "Student Age (1: 18-21, 2: 22-25, 3: above 26)",
+        "Gender": "Gender (1: female, 2: male)",
+        "Sex": "Gender / Sex (1: female, 2: male)",
+        "Graduated high-school type": "Graduated high-school type (1: private, 2: state, 3: other)",
+        "Scholarship type": "Scholarship type (1: None, 2: 25%, 3: 50%, 4: 75%, 5: Full)",
+        "Additional work": "Additional work (1: Yes, 2: No)",
+        "Regular artistic or sports activity": "Regular artistic or sports activity (1: Yes, 2: No)",
+        "Do you have a partner": "Do you have a partner (1: Yes, 2: No)",
+        "Total salary if available": "Total salary if available (1: USD 135-200, 2: USD 201-270, 3: USD 271-340, 4: USD 341-410, 5: above 410)",
+        "Transportation to the university": "Transportation to the university (1: Bus, 2: Private car/taxi, 3: bicycle, 4: Other)",
+        "Accommodation type in Cyprus": "Accommodation type in Cyprus (1: rental, 2: dormitory, 3: with family, 4: Other)",
+        "Mother education": "Mother education (1: primary school, 2: secondary school, 3: high school, 4: university, 5: MSc., 6: Ph.D.)",
+        "Mothers' education": "Mother education (1: primary school, 2: secondary school, 3: high school, 4: university, 5: MSc., 6: Ph.D.)",
+        "Father education": "Father education (1: primary school, 2: secondary school, 3: high school, 4: university, 5: MSc., 6: Ph.D.)",
+        "Fathers' education": "Father education (1: primary school, 2: secondary school, 3: high school, 4: university, 5: MSc., 6: Ph.D.)",
+        "Number of sisters/brothers": "Number of sisters/brothers (1: 1, 2: 2, 3: 3, 4: 4, 5: 5 or above)",
+        "Parental status": "Parental status (1: married, 2: divorced, 3: died - one of them or both)",
+        "Mother occupation": "Mother occupation (1: retired, 2: housewife, 3: government officer, 4: private sector employee, 5: self-employment, 6: other)",
+        "Mothers' occupation": "Mother occupation (1: retired, 2: housewife, 3: government officer, 4: private sector employee, 5: self-employment, 6: other)",
+        "Father occupation": "Father occupation (1: retired, 2: government officer, 3: private sector employee, 4: self-employment, 5: other)",
+        "Fathers' occupation": "Father occupation (1: retired, 2: government officer, 3: private sector employee, 4: self-employment, 5: other)",
+        "Weekly study hours": "Weekly study hours (1: None, 2: <5 hours, 3: 6-10 hours, 4: 11-20 hours, 5: more than 20 hours)",
+        "Reading frequency (non-scientific books/journals)": "Reading frequency (non-scientific books/journals) (1: None, 2: Sometimes, 3: Often)",
+        "Reading frequency (scientific books/journals)": "Reading frequency (scientific books/journals) (1: None, 2: Sometimes, 3: Often)",
+        "Attendance to the seminars/conferences related to the department": "Attendance to the seminars/conferences related to the department (1: Yes, 2: No)",
+        "Impact of your projects/activities on your success": "Impact of your projects/activities on your success (1: positive, 2: negative, 3: neutral)",
+        "Attendance to classes": "Attendance to classes (1: always, 2: sometimes, 3: never)",
+        "Preparation to midterm exams 1": "Preparation to midterm exams 1 (1: alone, 2: with friends, 3: not applicable)",
+        "Preparation to midterm exams 2": "Preparation to midterm exams 2 (1: closest date to the exam, 2: regularly during the semester, 3: never)",
+        "Taking notes in classes": "Taking notes in classes (1: never, 2: sometimes, 3: always)",
+        "Listening in classes": "Listening in classes (1: never, 2: sometimes, 3: always)",
+        "Discussion improves my interest and success in the course": "Discussion improves my interest and success in the course (1: never, 2: sometimes, 3: always)",
+        "Flip-classroom": "Flip-classroom (1: not useful, 2: useful, 3: not applicable)",
+        "Cumulative grade point average in the last semester (/4.00)": "Cumulative GPA last semester (/4.00) (1: <2.00, 2: 2.00-2.49, 3: 2.50-2.99, 4: 3.00-3.49, 5: above 3.49)",
+        "Expected Cumulative grade point average in the graduation (/4.00)": "Expected cumulative GPA in graduation (/4.00) (1: <2.00, 2: 2.00-2.49, 3: 2.50-2.99, 4: 3.00-3.49, 5: above 3.49)",
+        "Course ID": "Course ID (enter whole number ID)"
+    }
+
+    st.write("Enter **integer values** for each attribute according to the codes given:")
 
     user_values = []
     cols = st.columns(2)  # two columns layout for cleaner UI
 
     for i, feat in enumerate(feature_names):
-        # Alternate between column 0 and 1
+        # Skip if somehow target column is in feature_names (shouldn't be)
+        if feat == target_col:
+            continue
+
+        label = feature_help.get(feat, feat)
         col = cols[i % 2]
         with col:
             val = st.number_input(
-                label=f"{feat}",
+                label=label,
                 min_value=0,
                 step=1,
                 format="%d"
@@ -222,12 +266,10 @@ elif mode == "Single prediction (enter attributes)":
         user_values.append(val)
 
     if st.button("Predict OUTPUT Grade"):
-        # Use predict_single helper (from stacking_cv)
         pred_label, proba = predict_single(model, user_values)
 
         st.success(f"Predicted OUTPUT Grade: **{pred_label}**")
 
-        # Show probabilities per class
         st.write("### Class probabilities")
         proba_df = pd.DataFrame({
             "Class": classes,
