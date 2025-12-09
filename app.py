@@ -1,8 +1,7 @@
+# app.py
 import numpy as np
 import pandas as pd
 import streamlit as st
-
-from sklearn.exceptions import NotFittedError
 
 from stacking_cv import load_dataset, train_full_model, predict_single
 
@@ -10,11 +9,11 @@ from stacking_cv import load_dataset, train_full_model, predict_single
 # Basic config
 # -------------------------------------------------
 st.set_page_config(
-    page_title="Student OUTPUT Grade – Prediction Demo",
+    page_title="Student OUTPUT Grade – Prediction Demo (Lightweight)",
     layout="wide"
 )
 
-st.title("🎓 Student OUTPUT Grade Prediction (Lightweight Demo)")
+st.title("🎓 Student OUTPUT Grade Prediction – Lightweight Demo")
 
 st.markdown(
     """
@@ -25,7 +24,7 @@ This lightweight app:
 - Lets you enter student attributes as integer codes  
 - Predicts the **OUTPUT Grade** for that student  
 
-All heavy cross-validation and plots have been removed so it runs smoothly on Streamlit Cloud.
+To keep it fast and within cloud limits, heavy cross-validation & plots are removed.
 """
 )
 
@@ -69,11 +68,19 @@ def get_trained_model_and_metadata():
     model, feature_names, classes = train_full_model(DATA_PATH)
     return model, feature_names, classes
 
-try:
-    model, feature_names, classes = get_trained_model_and_metadata()
-except Exception as e:
-    st.error(f"Error while training the model: {e}")
-    st.stop()
+model, feature_names, classes = get_trained_model_and_metadata()
+
+# For convenience, build a mapping from numeric OUTPUT Grade to letter grade
+grade_label_map = {
+    0: "Fail",
+    1: "DD",
+    2: "DC",
+    3: "CC",
+    4: "CB",
+    5: "BB",
+    6: "BA",
+    7: "AA"
+}
 
 # -------------------------------------------------
 # 3. Helper: labels with coding instructions
@@ -180,7 +187,7 @@ cols = st.columns(2)  # two-column layout
 
 for i, feat in enumerate(feature_names):
     # feature_names should already exclude the target column
-    label = feature_help.get(feat, feat)  # fall back to raw name if not in dict
+    label = feature_help.get(feat, feat)  # fallback to raw name if not in dict
     col = cols[i % 2]
     with col:
         val = st.number_input(
@@ -192,19 +199,12 @@ for i, feat in enumerate(feature_names):
     user_values.append(val)
 
 if st.button("Predict OUTPUT Grade"):
-    try:
-        pred_label, proba = predict_single(model, user_values)
+    pred_label, pred_proba = predict_single(model, user_values)
 
-        st.success(f"🎯 Predicted OUTPUT Grade: **{pred_label}**")
+    # Decode label if mapping exists
+    human_label = grade_label_map.get(pred_label, str(pred_label))
 
-        st.markdown("### Class probabilities")
-        proba_df = pd.DataFrame({
-            "Class": classes,
-            "Probability": proba
-        })
-        st.dataframe(proba_df.style.format({"Probability": "{:.4f}"}))
-
-    except NotFittedError:
-        st.error("Model is not fitted. Please retrain or check the training step.")
-    except Exception as e:
-        st.error(f"An error occurred during prediction: {e}")
+    st.success(
+        f"🎯 Predicted OUTPUT Grade: **{pred_label} ({human_label})**\n\n"
+        f"Estimated probability for this grade: **{pred_proba:.4f}**"
+    )
