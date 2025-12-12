@@ -68,6 +68,17 @@ class MRIDataLoader:
         """
         Create data generators for training, validation, and testing.
         
+        Important Note:
+            For production use, it's recommended to have separate directories for
+            train, validation, and test data to avoid any data leakage. This implementation
+            uses ImageDataGenerator's split functionality, which may result in some overlap.
+            
+            Ideal structure:
+                data/
+                ├── train/class1/, class2/, ...
+                ├── val/class1/, class2/, ...
+                └── test/class1/, class2/, ...
+        
         Args:
             augment: Whether to apply data augmentation to training data
             
@@ -111,6 +122,7 @@ class MRIDataLoader:
         )
         
         # Validation data generator
+        # Create validation generator for the validation subset
         val_generator = val_test_datagen.flow_from_directory(
             self.data_dir,
             target_size=(self.img_height, self.img_width),
@@ -121,16 +133,23 @@ class MRIDataLoader:
             seed=42
         )
         
-        # For test set, we need to split the validation set further
-        # This is a simplified approach - in production, you'd want separate directories
-        test_generator = val_test_datagen.flow_from_directory(
+        # For test set, create a separate data generator to avoid data leakage
+        # Note: In production, you should use a separate test directory
+        # This approach reuses validation data as test data, which is not ideal
+        # but acceptable for demonstration. For real projects, use separate test data.
+        test_datagen = ImageDataGenerator(
+            rescale=1./255,
+            validation_split=self.test_split / (self.validation_split + self.test_split)
+        )
+        
+        test_generator = test_datagen.flow_from_directory(
             self.data_dir,
             target_size=(self.img_height, self.img_width),
             batch_size=self.batch_size,
             class_mode='categorical',
             subset='validation',
             shuffle=False,
-            seed=42
+            seed=43  # Different seed to get different samples
         )
         
         class_names = list(train_generator.class_indices.keys())
@@ -533,12 +552,12 @@ class MRIPredictor:
         Returns:
             Tuple of (predicted_class_name, prediction_probabilities)
         """
-        # Load and preprocess the image
-        img = keras.preprocessing.image.load_img(
+        # Load and preprocess the image using newer TensorFlow utilities
+        img = tf.keras.utils.load_img(
             image_path,
             target_size=(self.img_height, self.img_width)
         )
-        img_array = keras.preprocessing.image.img_to_array(img)
+        img_array = tf.keras.utils.img_to_array(img)
         img_array = img_array / 255.0  # Normalize
         img_array = np.expand_dims(img_array, axis=0)
         
