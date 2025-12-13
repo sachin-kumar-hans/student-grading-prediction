@@ -97,7 +97,6 @@ def build_stacking_model():
     # Meta-learner: Logistic Regression (internally optimized via LBFGS)
     meta_clf = LogisticRegression(
         max_iter=1000,
-        multi_class="multinomial",
         solver="lbfgs"
     )
 
